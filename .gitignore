@@ -1,0 +1,20 @@
+# Vivado project recreated by Scripts/build.tcl
+build/
+
+# Vivado logs, journals and temp files
+.Xil/
+*.jou
+*.log
+*.str
+vivado*.backup.*
+NA/
+
+# Generated outputs that should not be committed
+*.xpr
+*.cache/
+*.gen/
+*.hw/
+*.ip_user_files/
+*.runs/
+*.sim/
+*.srcs/
