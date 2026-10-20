@@ -40,21 +40,57 @@ If you already cloned without `--recursive`:
 git submodule update --init
 ```
 
+## Prebuilt hardware platform
+
+If you only need the hardware, download `design_1_wrapper.xsa` from the [latest release](../../releases/latest). It contains the bitstream, the hardware handoff file (`.hwh`) and the PS initialization files, ready for Vitis or for unzipping into a PYNQ overlay.
+
 ## Building the project
 
-From Vivado's Tcl console:
+Two scripts, run from Vivado's Tcl console:
 
 ```
 source <path-to-repo>/Scripts/build.tcl
+source <path-to-repo>/Scripts/compile.tcl
 ```
 
-Or in batch mode:
+Or in batch mode, in one step (`compile.tcl` runs `build.tcl` first if the project doesn't exist yet):
 
 ```
-vivado -mode batch -source Scripts/build.tcl
+vivado -mode batch -source Scripts/compile.tcl
 ```
 
-The script creates the project in `build/` inside the repository (ignored by git), recreates `design_1` from `Sources/BD/design_1.tcl`, generates its output products and the HDL wrapper, and applies the saved synthesis and implementation settings from `Scripts/project_settings.tcl`. Then run synthesis, implementation and bitstream generation as usual.
+`build.tcl` creates the project in `build/` inside the repository (ignored by git), recreates `design_1` from `Sources/BD/design_1.tcl`, generates its output products and the HDL wrapper, and applies the saved synthesis and implementation settings from `Scripts/project_settings.tcl`.
+
+`compile.tcl` runs synthesis, implementation and bitstream generation, stops with an error if timing is not met, and writes `build/design_1_wrapper.xsa` (bitstream included).
+
+### Compile time
+
+The scripts are set up for the shortest build:
+
+- **IP cache outside the project.** Out-of-context IP synthesis results are cached in `ip_cache/` at the repository root (ignored by git). Deleting `build/` and rebuilding reuses them, so only the top level is synthesized again. Cache entries are tied to each IP's configuration and the Vivado version, so a changed IP is always re-synthesized.
+- **All CPU threads.** Vivado uses 2 threads by default on Windows. `Sources/Scripts/max_threads.tcl` raises this to the number of logical CPUs (Vivado's limit is 32) for the Tcl session and, as a hook, for the implementation run.
+- **Lighter strategies.** Top-level synthesis uses `Flow_RuntimeOptimized` (it is only the block design wrapper). Implementation uses `Vivado Implementation Defaults` instead of the original `Performance_ExplorePostRoutePhysOpt`. The IP runs keep the default synthesis strategy, because `v_frmbuf_rd` misses timing when synthesized with `Flow_RuntimeOptimized`.
+- **Parallel runs.** `compile.tcl` launches runs with up to 8 parallel jobs (each IP run needs about 1 GB of RAM).
+
+Implementation strategies tried, post-route worst negative slack (WNS):
+
+| `impl_1` strategy | WNS | Result |
+|---|---|---|
+| `Flow_RuntimeOptimized` | −0.29 ns | Fails timing |
+| `Vivado Implementation Defaults` (used) | +0.08 ns | Meets timing |
+| `Performance_Explore` | +0.21 ns | Meets timing, about 1.5× longer placement |
+
+If a design change breaks timing, set `impl_1` to `Performance_Explore` in `Scripts/project_settings.tcl`.
+
+Measured on a laptop (Intel i7-1260P, 16 threads, 16 GB RAM), rebuilding from a deleted `build/` with the IP cache filled:
+
+| Step | Time |
+|---|---|
+| `build.tcl` (recreate project and block design) | 30 s |
+| Synthesis (13 of 14 IPs from the cache; only the processing system is synthesized) | 3.5 min |
+| Implementation through bitstream | 6 min |
+
+The first build on a machine fills the cache and adds about 4 minutes of IP synthesis.
 
 Expected messages: Vivado reports critical warnings `PSU-1` to `PSU-4` about negative DDR DQS-to-clock delays. They come from the PYNQ-Z2 board preset for the processing system and also appear in the original project.
 
@@ -65,7 +101,9 @@ Expected messages: Vivado reports critical warnings `PSU-1` to `PSU-4` about neg
 | `Sources/BD/design_1.tcl` | The block design, as written by `write_bd_tcl` |
 | `Sources/Constraints/pynq_z2.xdc` | Pin and timing constraints |
 | `Scripts/build.tcl` | Recreates the project |
+| `Scripts/compile.tcl` | Synthesis, implementation, bitstream, timing check and `.xsa` export |
 | `Scripts/project_settings.tcl` | Part, board, top module, and synthesis/implementation settings |
+| `Sources/Scripts/max_threads.tcl` | Raises Vivado's thread count to the number of CPUs |
 | `Scripts/verification_manifest.tcl` | Expected structure, for checking a rebuild (see below) |
 | `vivado-library/` | Digilent IP library (git submodule) |
 

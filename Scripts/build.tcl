@@ -45,6 +45,17 @@ set_property IP_REPO_PATHS [list \
 update_ip_catalog
 
 #─────────────────────────────────────────────────────────────────────────────────
+# Step 1c: Compile-time settings
+# The IP synthesis cache lives in <repo>/ip_cache (git-ignored), outside build/,
+# so a clean rebuild reuses the out-of-context IP results instead of
+# synthesizing all IPs again. Entries are keyed on IP configuration and Vivado
+# version, so stale results are never picked up.
+# This Vivado session also uses every logical CPU (Windows default: 2 threads).
+#─────────────────────────────────────────────────────────────────────────────────
+config_ip_cache -use_cache_location [file normalize $base_dir/ip_cache]
+source $base_dir/Sources/Scripts/max_threads.tcl
+
+#─────────────────────────────────────────────────────────────────────────────────
 # Step 2: Add RTL Sources
 #─────────────────────────────────────────────────────────────────────────────────
 # Local sources — import into project for full portability

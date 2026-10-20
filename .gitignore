@@ -18,3 +18,6 @@ NA/
 *.runs/
 *.sim/
 *.srcs/
+
+# IP synthesis cache shared across clean rebuilds (see Scripts/build.tcl)
+ip_cache/
